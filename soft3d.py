@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import json
+import array
 
 from tkinter import *
 from PIL import Image, ImageTk
@@ -8,12 +9,14 @@ from math import radians
 
 from soft3dUtils import Matrices, Util
 
-DEFAULT_WIDTH = 400
-DEFAULT_HEIGHT = 300
+DEFAULT_WIDTH = 200
+DEFAULT_HEIGHT = 150
 MIN_WAIT = 50 # We need to give some time to Tk or it won't show the canvas window at all (ms)
 ROTATION_AXIS = (1.0, 0.0, 1.0)
 ROTATION_SPEED = 0.1
 CAMERA_POS = (0.0, 0.0, -3.0)
+
+CLEAR_FLAG = True
 
 class renderMode:
     VERTEX = 0
@@ -21,31 +24,43 @@ class renderMode:
     FACES = 2
     TEXTURE = 3
     
-    current = WIREFRAME
+    current = VERTEX
     
     def setDefault(value):
         current = value
 
 class Device:
     def __init__(self, width=DEFAULT_WIDTH, height=DEFAULT_HEIGHT):
-        self.backBuffer = [(0, 0, 0, 0) for i in range(width*height)]
+        # TODO: c'est stupide, changer ca pour quelque chose de plus low-level qu'une fucking liste
+        #self.backBuffer = [(0, 0, 0, 0) for i in range(width*height)]
+        self.backBuffer = array.array('B', [0 for i in range(width*height*4)])
         self.width = width
         self.height = height
     
     def clear(self, r=0, g=0, b=0, a=255):
-        #for i in range(len(self.backBuffer)):
-        #    self.backBuffer[i] = (r, g, b, a)
-        self.backBuffer = [(r, g, b, a)] * len(self.backBuffer)
+        # TODO: that fucking clear is sooooooooooooooooooooooooooooooo long, fuck that shit
+        for i in range(0, len(self.backBuffer), 4):
+            self.backBuffer[i+0] = r
+            self.backBuffer[i+1] = g
+            self.backBuffer[i+2] = b
+            self.backBuffer[i+3] = a
+        
+        #self.backBuffer = array.array('B', [255 if (i+1) % 4 == 0 else 0 for i in range(self.width*self.height*4)])
+        #self.backBuffer = [(r, g, b, a)] * len(self.backBuffer)
     
     def getFrameImage(self):
-        im = Image.new('RGBA', (self.width, self.height))
-        im.putdata(self.backBuffer)
+        #im = Image.new('RGBA', (self.width, self.height))
+        #im.putdata(self.backBuffer)
         #im.save('asdfmarde.bmp')
+        im = Image.frombuffer('RGBA', (self.width, self.height), self.backBuffer, 'raw', 'RGBA', 0, 1)
         return ImageTk.PhotoImage(im)
     
     def putPixel(self, x, y, rgba=(0, 0, 0, 0)):
-        index = (x + y * self.width)
-        self.backBuffer[index] = rgba
+        index = (x + y * self.width) * 4
+        self.backBuffer[index+0] = rgba[0] & 0xFF
+        self.backBuffer[index+1] = rgba[1] & 0xFF
+        self.backBuffer[index+2] = rgba[2] & 0xFF
+        self.backBuffer[index+3] = rgba[3] & 0xFF
     
     def transform(self, coord, transMat):
         x = (coord[0] * transMat[0][0]) + (coord[1] * transMat[1][0]) + (coord[2] * transMat[2][0]) + transMat[3][0]
@@ -208,7 +223,7 @@ def renderLoop(frameLen, camera, meshes, device, root, w, canvasImg):
     #meshes[1].rotation = (meshes[1].rotation[0] + newrot[1], meshes[1].rotation[1] + newrot[0], meshes[1].rotation[2] + newrot[1])
     
     camera.pos = (camera.pos[0], camera.pos[1], camera.pos[2])
-    device.render(camera, meshes, clear=True)
+    device.render(camera, meshes, clear=CLEAR_FLAG)
     frame = device.getFrameImage()
     #w.delete(ALL)
     #w.create_image((DEFAULT_WIDTH/2, DEFAULT_HEIGHT/2), image=frame)
@@ -241,7 +256,7 @@ def main():
     meshes = []
     meshes.extend(device.createMeshesFromJSON(json.loads(open('cul.json', 'r').read())))
     meshes[0].rotation = (radians(-90), 0.0, 0.0)
-    meshes.append(cube)
+    #meshes.append(cube)
     
     meshes = [cube]
     
